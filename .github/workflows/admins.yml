@@ -90,7 +90,9 @@ jobs:
           KULLANICI: ${{ github.event.pull_request.user.login }}
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s' "$YAYINCI_ANAHTAR" > ~/.ssh/yayinci
+          # GitHub secret'in sondaki satir sonunu kirpiyor; OpenSSH satir sonu
+          # olmayan ozel anahtari okuyamaz ("error in libcrypto", 14 Kas).
+          printf '%s\n' "$YAYINCI_ANAHTAR" > ~/.ssh/yayinci
           chmod 600 ~/.ssh/yayinci
           # command= kisitli; sunucudaki yayinci-komut.sh kullanici+icerigi
           # stdin'den alir, sira numarasini kendi verir, dosyayi yazar.

@@ -1,0 +1,99 @@
+name: admins
+
+# pull_request_target: her zaman main'deki iş akışı ve kontrol betiği koşar;
+# PR'ın değiştirdiği iş akışı KOŞMAZ. PR'ın kodu checkout EDİLMEZ; değişen
+# dosya GitHub API'sinden veri olarak okunur. Sırlar (bayrak HMAC anahtarı,
+# yayinci SSH anahtarı) böylece fork PR'larında bile güvende.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    paths: ['admins/**']
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: admins-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: main'deki kontrol betigini al (PR kodu degil)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: check
+        id: k
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMARA: ${{ github.event.pull_request.number }}
+          PR_SAHIBI: ${{ github.event.pull_request.user.login }}
+          PR_BASLIK: ${{ github.event.pull_request.title }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BAYRAK_SIRRI: ${{ secrets.BAYRAK_SIRRI }}
+        run: |
+          if bash .github/check.sh > check-report.txt 2>&1; then
+            cat check-report.txt
+          else
+            cat check-report.txt
+            exit 1
+          fi
+
+      - name: hata olursa PR'a Turkce yorum
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "Merhaba. Otomatik kontrol su noktalarda takildi:"
+            echo
+            cat check-report.txt
+            echo
+            echo "Duzeltip yeni bir commit atarsan kontrol tekrar calisir. Takilirsan yardim kanalina yaz."
+          } > yorum.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file yorum.md
+
+  merge:
+    needs: check
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      REPO: ${{ github.repository }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: squash ile birlestir (yalniz dogrulanan SHA)
+        # --match-head-commit: head doğrulamadan sonra oynadıysa merge iptal
+        # olur (TOCTOU koruması). Doğruladığımız SHA ile birleşen SHA aynıdır.
+        run: |
+          gh pr merge "$PR" --repo "$REPO" --squash --admin \
+            --match-head-commit "$HEAD_SHA"
+
+  publish:
+    needs: merge
+    runs-on: ubuntu-latest
+    steps:
+      - name: birlesmis dosyayi main'den al
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: yayinci ile sunucuya birak
+        env:
+          YAYINCI_ANAHTAR: ${{ secrets.YAYINCI_ANAHTAR }}
+          YAYINCI_HOST: ${{ secrets.YAYINCI_HOST }}
+          KULLANICI: ${{ github.event.pull_request.user.login }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s' "$YAYINCI_ANAHTAR" > ~/.ssh/yayinci
+          chmod 600 ~/.ssh/yayinci
+          # command= kisitli; sunucudaki yayinci-komut.sh kullanici+icerigi
+          # stdin'den alir, sira numarasini kendi verir, dosyayi yazar.
+          { printf '%s\n' "$KULLANICI"; cat "admins/${KULLANICI}.json"; } \
+            | ssh -i ~/.ssh/yayinci -o StrictHostKeyChecking=accept-new \
+                  "yayinci@${YAYINCI_HOST}"

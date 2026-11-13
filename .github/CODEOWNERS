@@ -1,0 +1,4 @@
+# .github altindaki her sey (is akisi, kontrol betigi) yalnizca organizer
+# onayiyla degisir. pull_request_target zaten main'deki is akisini kosar; bu
+# da bir oyuncunun PR'da kontrol mantigini degistirip birlestirmesini onler.
+/.github/ @ismailtrm

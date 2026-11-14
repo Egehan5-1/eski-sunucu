@@ -6,7 +6,9 @@ name: admins
 # yayinci SSH anahtarı) böylece fork PR'larında bile güvende.
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened]
+    # edited: PR başlığı düzeltilince check yeniden koşsun (14 Kas, deneme
+    # oyuncusu başlığı düzeltti, koşu olmadı; PR'ı kapatıp yenisini açtı).
+    types: [opened, synchronize, reopened, edited]
     paths: ['admins/**']
 
 permissions:
@@ -19,6 +21,8 @@ concurrency:
 
 jobs:
   check:
+    # Kapanmış ya da birleşmiş PR'ın başlığı sonradan düzenlenirse koşma.
+    if: github.event.pull_request.state == 'open'
     runs-on: ubuntu-latest
     steps:
       - name: main'deki kontrol betigini al (PR kodu degil)
@@ -54,7 +58,7 @@ jobs:
             echo
             cat check-report.txt
             echo
-            echo "Duzeltip yeni bir commit atarsan kontrol tekrar calisir. Takilirsan yardim kanalina yaz."
+            echo "PR basligini duzenlersen ya da yeni bir commit atarsan kontrol tekrar calisir. Takilirsan yardim kanalina yaz."
           } > yorum.md
           gh pr comment "${{ github.event.pull_request.number }}" --body-file yorum.md
 
